@@ -7,11 +7,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from validacoes import (
     validar_cpf, validar_cnpj, validar_email,
-    validar_celular, validar_cep, consulta_cep
+    validar_celular, validar_cep, consulta_cep,validar_nome
 )
 import database
 import re
 
+id_editando = None
 app = QApplication([])
 
 window = QWidget()
@@ -64,9 +65,6 @@ window.setStyleSheet("""
     }
 """)
 
-# ============================================================
-# TÍTULO
-# ============================================================
 fonte_titulo = QFont()
 fonte_titulo.setBold(True)
 fonte_titulo.setPointSize(18)
@@ -75,9 +73,7 @@ label_titulo = QLabel("Cadastro de Pessoa")
 label_titulo.setAlignment(Qt.AlignCenter)
 label_titulo.setFont(fonte_titulo)
 
-# ============================================================
-# CAMPOS - PESSOA
-# ============================================================
+
 nome = QLineEdit()
 nome.setPlaceholderText("Digite o nome completo")
 
@@ -93,9 +89,7 @@ email.setPlaceholderText("exemplo@email.com")
 celular = QLineEdit()
 celular.setPlaceholderText("(35) 99999-9999")
 
-# ============================================================
-# CAMPOS - ENDEREÇO
-# ============================================================
+
 cep = QLineEdit()
 cep.setPlaceholderText("Ex: 37500-000")
 
@@ -122,9 +116,6 @@ estado.addItems([
     "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"
 ])
 
-# ============================================================
-# BLOCO 1 - CADASTRO DA PESSOA
-# ============================================================
 bloco_pessoa = QGroupBox("Cadastro da Pessoa")
 form_pessoa = QFormLayout()
 form_pessoa.setSpacing(10)
@@ -138,15 +129,13 @@ form_pessoa.addRow("Celular:", celular)
 
 bloco_pessoa.setLayout(form_pessoa)
 
-# ============================================================
-# BLOCO 2 - CADASTRO DO ENDEREÇO
-# ============================================================
+
 bloco_endereco = QGroupBox("Cadastro do Endereço")
 form_endereco = QFormLayout()
 form_endereco.setSpacing(10)
 form_endereco.setLabelAlignment(Qt.AlignRight)
 
-# Linha especial do CEP: campo + botão
+
 linha_cep = QHBoxLayout()
 linha_cep.setSpacing(8)
 linha_cep.addWidget(cep)
@@ -162,9 +151,7 @@ form_endereco.addRow("Estado:", estado)
 
 bloco_endereco.setLayout(form_endereco)
 
-# ============================================================
-# BOTÕES
-# ============================================================
+
 botao_limpar = QPushButton("Limpar")
 botao_limpar.setStyleSheet(
     "background-color:#990000;color:white;font-weight:bold;"
@@ -180,10 +167,16 @@ botao_excluir.setStyleSheet(
     "background-color:#990000;color:white;font-weight:bold;"
 )
 
+botao_editar = QPushButton("Editar Cadastro")
+botao_editar.setStyleSheet(
+    "background-color:#004477;color:white;font-weight:bold;"
+)
+
 botoes = QHBoxLayout()
 botoes.setSpacing(10)
 botoes.addWidget(botao_limpar)
 botoes.addWidget(botao_salvar)
+botoes.addWidget(botao_editar)
 botoes.addWidget(botao_excluir)
 
 tabela = QTableWidget()
@@ -214,12 +207,64 @@ def pesquisar():
     tabela.setRowCount(len(pessoas))
     
     for linha, pessoa in enumerate(pessoas):
-        tabela.setItem(linha, 0, QTableWidgetItem(str(pessoa["id"])))
-        tabela.setItem(linha, 1, QTableWidgetItem(pessoa["nome"]))
-        tabela.setItem(linha, 2, QTableWidgetItem(pessoa["documento"]))
-        tabela.setItem(linha, 3, QTableWidgetItem(pessoa["email"]))
-        tabela.setItem(linha, 4, QTableWidgetItem(pessoa["celular"]))
-        tabela.setItem(linha, 5, QTableWidgetItem(pessoa["cidade"]))
+        tabela.setItem(linha, 0, QTableWidgetItem(pessoa["nome"]))
+        tabela.setItem(linha, 1, QTableWidgetItem(pessoa["documento"]))
+        tabela.setItem(linha, 2, QTableWidgetItem(pessoa["email"]))
+        tabela.setItem(linha, 3, QTableWidgetItem(pessoa["celular"]))
+        tabela.setItem(linha, 4, QTableWidgetItem(pessoa["cidade"]))
+
+def editar():
+    global id_editando
+
+    linha = tabela.currentRow()
+
+    if linha < 0:
+        QMessageBox.warning(
+            window,
+            "Nenhum cadastro selecionado",
+            "Selecione um cadastro na tabela."
+        )
+        return
+
+    item = tabela.item(linha, 0)
+
+    if item is None:
+        return
+
+    id_pessoa = item.data(Qt.UserRole)
+
+    pessoa = database.buscar_pessoa(id_pessoa)
+
+    if pessoa is None:
+        QMessageBox.warning(
+            window,
+            "Erro",
+            "Cadastro não encontrado."
+        )
+        return
+
+    id_editando = pessoa["id"]
+
+    nome.setText(pessoa["nome"])
+    tipo.setCurrentText(pessoa["tipo"])
+    documento.setText(pessoa["documento"])
+    email.setText(pessoa["email"])
+    celular.setText(pessoa["celular"])
+    cep.setText(pessoa["cep"])
+    logradouro.setText(pessoa["logradouro"])
+    numero.setText(pessoa["numero"])
+    complemento.setText(pessoa["complemento"])
+    bairro.setText(pessoa["bairro"])
+    cidade.setText(pessoa["cidade"])
+    estado.setCurrentText(pessoa["estado"])
+
+    botao_salvar.setText("Salvar Alterações")
+
+    QMessageBox.information(
+        window,
+        "Editar cadastro",
+        "Os dados foram carregados. Faça as alterações e clique em 'Salvar Alterações'."
+    )
 
 def excluir():
     linha = tabela.currentRow()
@@ -232,7 +277,18 @@ def excluir():
         )
         return
 
-    id_pessoa = tabela.item(linha, 0).text()
+
+    item = tabela.item(linha, 0)
+
+    if item is None:
+        QMessageBox.warning(
+            window,
+            "Erro",
+            "Não foi possível identificar o cadastro selecionado."
+        )
+        return
+
+    id_pessoa = item.data(Qt.UserRole)
 
     resposta = QMessageBox.question(
         window,
@@ -260,9 +316,6 @@ def excluir():
             "Não foi possível excluir o cadastro."
         )
 
-# ============================================================
-# LAYOUT PRINCIPAL
-# ============================================================
 layout = QVBoxLayout()
 layout.setSpacing(10)
 layout.setContentsMargins(20, 15, 20, 20)
@@ -278,9 +331,6 @@ layout.addWidget(tabela)
 
 window.setLayout(layout)
 
-# ============================================================
-# FUNÇÕES UTILITÁRIAS
-# ============================================================
 def re_digits(s: str) -> str:
     return re.sub(r'\D', '', s or "")
 
@@ -300,19 +350,17 @@ def limpar_campos():
     nome.setFocus()
 
 def validar_tudo() -> bool:
-    # --------------------------------------------------------
-    # Pessoa
-    # --------------------------------------------------------
-    if nome.text().strip() == "":
+
+    if not validar_nome(nome.text()):
         QMessageBox.warning(
-            window,
-            "Campo obrigatório",
-            "O campo 'Nome completo' não foi preenchido."
-        )
+        window,
+        "Nome inválido",
+        "Informe o nome completo, contendo pelo menos nome e sobrenome."
+    )
         nome.setFocus()
         return False
 
-    # Documento
+
     doc = re_digits(documento.text())
 
     if doc == "":
@@ -343,7 +391,6 @@ def validar_tudo() -> bool:
             documento.setFocus()
             return False
 
-    # E-mail
     if not validar_email(email.text().strip()):
         QMessageBox.warning(
             window,
@@ -353,7 +400,7 @@ def validar_tudo() -> bool:
         email.setFocus()
         return False
 
-    # Celular
+
     if not validar_celular(celular.text().strip()):
         QMessageBox.warning(
             window,
@@ -363,9 +410,7 @@ def validar_tudo() -> bool:
         celular.setFocus()
         return False
 
-    # --------------------------------------------------------
-    # Endereço
-    # --------------------------------------------------------
+
     if not validar_cep(cep.text().strip()):
         QMessageBox.warning(
             window,
@@ -413,9 +458,7 @@ def validar_tudo() -> bool:
 
     return True
 
-# ============================================================
-# CONSULTA DE CEP
-# ============================================================
+
 def on_consultar_cep():
     cep_val = cep.text().strip()
 
@@ -439,7 +482,7 @@ def on_consultar_cep():
         )
         return
 
-    # Preenche automaticamente os campos retornados pelo ViaCEP
+   
     logradouro.setText(resultado.get("logradouro", ""))
     bairro.setText(resultado.get("bairro", ""))
     cidade.setText(resultado.get("cidade", ""))
@@ -450,13 +493,12 @@ def on_consultar_cep():
     if idx != -1:
         estado.setCurrentIndex(idx)
 
-    # O usuário continua podendo alterar os dados preenchidos.
+
     numero.setFocus()
 
-# ============================================================
-# SALVAR
-# ============================================================
 def on_salvar():
+    global id_editando
+
     if not validar_tudo():
         return
 
@@ -475,54 +517,70 @@ def on_salvar():
         "estado": estado.currentText()
     }
 
-    ok = database.salvar_pessoa(dados)
+
+    if id_editando is None:
+        ok = database.salvar_pessoa(dados)
+        mensagem = "Cadastro salvo com sucesso."
+
+    else:
+        ok = database.atualizar_pessoa(id_editando, dados)
+        mensagem = "Cadastro atualizado com sucesso."
 
     if ok:
         QMessageBox.information(
             window,
             "Sucesso",
-            "Cadastro salvo com sucesso."
+            mensagem
         )
+
+        id_editando = None
+        botao_salvar.setText("Salvar Cadastro")
+
         limpar_campos()
         atualizar_tabela()
+
     else:
         QMessageBox.critical(
             window,
             "Erro",
-            "Ocorreu um erro ao salvar o cadastro."
+            "Não foi possível salvar as alterações."
         )
 
-# ============================================================
-# LIMPAR
-# ============================================================
 def on_limpar():
-    limpar_campos()
+    global id_editando
 
+    id_editando = None
+    botao_salvar.setText("Salvar Cadastro")
+
+    limpar_campos()
+    
 def atualizar_tabela():
     pessoas = database.listar_pessoas()
 
     tabela.setRowCount(len(pessoas))
 
     for linha, pessoa in enumerate(pessoas):
-        tabela.setItem(linha, 0, QTableWidgetItem(pessoa["nome"]))
+        item_nome = QTableWidgetItem(pessoa["nome"])
+
+    
+        item_nome.setData(Qt.UserRole, pessoa["id"])
+
+        tabela.setItem(linha, 0, item_nome)
         tabela.setItem(linha, 1, QTableWidgetItem(pessoa["documento"]))
         tabela.setItem(linha, 2, QTableWidgetItem(pessoa["email"]))
         tabela.setItem(linha, 3, QTableWidgetItem(pessoa["celular"]))
-        tabela.setItem(linha, 4, QTableWidgetItem(pessoa["cidade"]) )
+        tabela.setItem(linha, 4, QTableWidgetItem(pessoa["cidade"]))
 
-# ============================================================
-# CONECTAR SINAIS
-# ============================================================
+
 botao_cep.clicked.connect(on_consultar_cep)
 botao_salvar.clicked.connect(on_salvar)
 botao_limpar.clicked.connect(on_limpar)
 botao_pesquisar.clicked.connect(pesquisar)
 botao_todos.clicked.connect(atualizar_tabela)
+botao_editar.clicked.connect(editar)
 botao_excluir.clicked.connect(excluir)
 
-# ============================================================
-# INICIALIZAR BANCO E MOSTRAR JANELA
-# ============================================================
+
 database.criar_tabela()
 atualizar_tabela()
 window.show()
