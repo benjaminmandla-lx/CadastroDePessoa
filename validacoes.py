@@ -66,3 +66,17 @@ def consulta_cep(cep: str, timeout: float = 5.0) -> dict | None:
         }
     except requests.RequestException:
         return None
+def validar_nome(nome):
+    nome = nome.strip()
+
+
+    partes = nome.split()
+
+    if len(partes) < 2:
+        return False
+
+
+    if not re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ ]+", nome):
+        return False
+
+    return True
