@@ -1,8 +1,12 @@
 # main.py
 from PySide6.QtWidgets import (
     QApplication, QWidget, QPushButton, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QComboBox, QMessageBox, QGroupBox, QFormLayout, QTableWidget, QTableWidgetItem
+    QLabel, QLineEdit, QComboBox, QMessageBox, QGroupBox, QFormLayout, QTableWidget, QTableWidgetItem,QFileDialog
 )
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from validacoes import (
@@ -167,6 +171,8 @@ botao_excluir.setStyleSheet(
     "background-color:#990000;color:white;font-weight:bold;"
 )
 
+botao_pdf = QPushButton("Exportar PDF")
+
 botao_editar = QPushButton("Editar Cadastro")
 botao_editar.setStyleSheet(
     "background-color:#004477;color:white;font-weight:bold;"
@@ -177,6 +183,7 @@ botoes.setSpacing(10)
 botoes.addWidget(botao_limpar)
 botoes.addWidget(botao_salvar)
 botoes.addWidget(botao_editar)
+botoes.addWidget(botao_pdf)
 botoes.addWidget(botao_excluir)
 
 tabela = QTableWidget()
@@ -190,12 +197,10 @@ tabela.horizontalHeader().setStretchLastSection(True)
 campo_pesquisa = QLineEdit()
 campo_pesquisa.setPlaceholderText("Pesquisar por nome...")
 
-botao_pesquisar = QPushButton("Pesquisar")
 botao_todos = QPushButton("Mostrar todos")
 
 linha_pesquisa = QHBoxLayout()
 linha_pesquisa.addWidget(campo_pesquisa)
-linha_pesquisa.addWidget(botao_pesquisar)
 linha_pesquisa.addWidget(botao_todos)
 
 def pesquisar():
@@ -207,7 +212,10 @@ def pesquisar():
     tabela.setRowCount(len(pessoas))
     
     for linha, pessoa in enumerate(pessoas):
-        tabela.setItem(linha, 0, QTableWidgetItem(pessoa["nome"]))
+        item_nome = QTableWidgetItem(pessoa["nome"])
+        item_nome.setData(Qt.UserRole, pessoa["id"])
+
+        tabela.setItem(linha, 0, item_nome)
         tabela.setItem(linha, 1, QTableWidgetItem(pessoa["documento"]))
         tabela.setItem(linha, 2, QTableWidgetItem(pessoa["email"]))
         tabela.setItem(linha, 3, QTableWidgetItem(pessoa["celular"]))
@@ -570,14 +578,166 @@ def atualizar_tabela():
         tabela.setItem(linha, 2, QTableWidgetItem(pessoa["email"]))
         tabela.setItem(linha, 3, QTableWidgetItem(pessoa["celular"]))
         tabela.setItem(linha, 4, QTableWidgetItem(pessoa["cidade"]))
+        
+def exportar_pdf():
+    caminho, _ = QFileDialog.getSaveFileName(
+        window,
+        "Salvar PDF",
+        "pessoas.pdf",
+        "Arquivos PDF (*.pdf)"
+    )
 
+    if not caminho:
+        return
+
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.pdfgen import canvas
+
+    pdf = canvas.Canvas(caminho, pagesize=landscape(A4))
+
+    largura, altura = landscape(A4)
+
+    # Título
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(30, altura - 35, "Cadastro de Pessoas")
+
+    # Posição inicial da tabela
+    y = altura - 65
+
+    # Largura das colunas
+    colunas = {
+        "nome": 150,
+        "documento": 110,
+        "email": 180,
+        "celular": 100,
+        "cidade": 120
+    }
+
+    # Posições das colunas
+    x_nome = 30
+    x_documento = x_nome + colunas["nome"]
+    x_email = x_documento + colunas["documento"]
+    x_celular = x_email + colunas["email"]
+    x_cidade = x_celular + colunas["celular"]
+
+    # Cabeçalho
+    pdf.setFont("Helvetica-Bold", 9)
+
+    pdf.drawString(x_nome, y, "Nome")
+    pdf.drawString(x_documento, y, "Documento")
+    pdf.drawString(x_email, y, "E-mail")
+    pdf.drawString(x_celular, y, "Celular")
+    pdf.drawString(x_cidade, y, "Cidade")
+
+    y -= 18
+
+    # Dados
+    pdf.setFont("Helvetica", 8)
+
+    for linha in range(tabela.rowCount()):
+
+        nome = tabela.item(linha, 0).text()
+        documento = tabela.item(linha, 1).text()
+        email = tabela.item(linha, 2).text()
+        celular = tabela.item(linha, 3).text()
+        cidade = tabela.item(linha, 4).text()
+
+        # Quebra o nome em duas linhas se for muito grande
+        if len(nome) > 25:
+            palavras = nome.split()
+            primeira_linha = ""
+            segunda_linha = ""
+
+            for palavra in palavras:
+                if pdf.stringWidth(
+                    primeira_linha + " " + palavra,
+                    "Helvetica",
+                    8
+                ) <= colunas["nome"]:
+                    primeira_linha += (" " if primeira_linha else "") + palavra
+                else:
+                    segunda_linha += (" " if segunda_linha else "") + palavra
+
+            nome_linhas = [primeira_linha, segunda_linha]
+        else:
+            nome_linhas = [nome]
+
+        # Quebra a cidade em duas linhas se necessário
+        if pdf.stringWidth(cidade, "Helvetica", 8) > colunas["cidade"]:
+            palavras = cidade.split()
+            primeira_linha = ""
+            segunda_linha = ""
+
+            for palavra in palavras:
+                if pdf.stringWidth(
+                    primeira_linha + " " + palavra,
+                    "Helvetica",
+                    8
+                ) <= colunas["cidade"]:
+                    primeira_linha += (" " if primeira_linha else "") + palavra
+                else:
+                    segunda_linha += (" " if segunda_linha else "") + palavra
+
+            cidade_linhas = [primeira_linha, segunda_linha]
+        else:
+            cidade_linhas = [cidade]
+
+        # Primeira linha
+        pdf.drawString(x_nome, y, nome_linhas[0])
+        pdf.drawString(x_documento, y, documento)
+        pdf.drawString(x_email, y, email)
+        pdf.drawString(x_celular, y, celular)
+        pdf.drawString(x_cidade, y, cidade_linhas[0])
+
+        # Segunda linha, caso exista
+        if len(nome_linhas) > 1 or len(cidade_linhas) > 1:
+
+            y -= 10
+
+            if len(nome_linhas) > 1:
+                pdf.drawString(x_nome, y, nome_linhas[1])
+
+            if len(cidade_linhas) > 1:
+                pdf.drawString(x_cidade, y, cidade_linhas[1])
+
+        y -= 20
+
+        # Nova página
+        if y < 40:
+            pdf.showPage()
+
+            pdf.setFont("Helvetica-Bold", 16)
+            pdf.drawString(30, altura - 35, "Cadastro de Pessoas")
+
+            y = altura - 65
+
+            pdf.setFont("Helvetica-Bold", 9)
+
+            pdf.drawString(x_nome, y, "Nome")
+            pdf.drawString(x_documento, y, "Documento")
+            pdf.drawString(x_email, y, "E-mail")
+            pdf.drawString(x_celular, y, "Celular")
+            pdf.drawString(x_cidade, y, "Cidade")
+
+            y -= 18
+
+            pdf.setFont("Helvetica", 8)
+
+    pdf.save()
+
+    QMessageBox.information(
+        window,
+        "PDF gerado",
+        "Os dados da tabela foram exportados com sucesso."
+    )
 
 botao_cep.clicked.connect(on_consultar_cep)
 botao_salvar.clicked.connect(on_salvar)
 botao_limpar.clicked.connect(on_limpar)
-botao_pesquisar.clicked.connect(pesquisar)
+campo_pesquisa.textChanged.connect(pesquisar)
 botao_todos.clicked.connect(atualizar_tabela)
 botao_editar.clicked.connect(editar)
+botao_pdf.clicked.connect(exportar_pdf)
 botao_excluir.clicked.connect(excluir)
 
 
